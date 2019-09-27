@@ -1,0 +1,11 @@
+{
+  "name": "simple-websockets-chat-app",
+  "version": "1.0.0",
+  "main": "index.js",
+  "repository": "https://github.com/aws-samples/simple-websockets-chat-app.git",
+  "author": "Oliver Bredenberg <o.bredenberg@gmail.com>",
+  "license": "MIT",
+  "scripts": {
+    
+  }
+}

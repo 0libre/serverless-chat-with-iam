@@ -1,0 +1,350 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: ChatApp
+Transform: AWS::Serverless-2016-10-31
+Parameters:
+  Environment:
+    Type: String
+  Service:
+    Type: String
+  UserPoolId:
+    Type: String
+  UserPoolClientId:
+    Type: String
+Globals:
+  Function:
+    Runtime: nodejs10.x
+    MemorySize: 256
+    Environment:
+      Variables:
+        Service: !Sub ${Service}
+        TABLE_NAME: !Sub ${Service}-${Environment}
+        Environment: !Sub ${Environment}
+        UserPoolId: !Sub ${UserPoolId}
+        UserPoolClientId: !Sub ${UserPoolClientId}
+Resources:
+  ApiGateway:
+    Type: AWS::ApiGatewayV2::Api
+    Properties:
+      Name: !Sub ${Service}-${Environment}
+      ProtocolType: WEBSOCKET
+      RouteSelectionExpression: "$request.body.action"
+  CognitoApiGateway:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: !Sub ${Environment}
+      Name: !Sub ${Service}-Cognito-${Environment}
+      DefinitionBody:
+        swagger: "2.0"
+        info:
+          title: !Sub ${Service}-Cognito-${Environment}
+        paths:
+          /login:
+            post:
+              consumes:
+              - "application/json"
+              produces:
+              - "application/json"
+              responses:
+                '200':
+                  description: "200 response"
+                  schema:
+                    $ref: "#/definitions/Empty"
+                  headers:
+                    Access-Control-Allow-Origin:
+                      type: "string"
+              x-amazon-apigateway-integration:
+                credentials: !Sub arn:aws:iam::${AWS::AccountId}:role/${Service}-Cognito-Api-${Environment}
+                uri: arn:aws:apigateway:eu-west-1:cognito-idp:action/AdminInitiateAuth
+                responses:
+                  default:
+                    statusCode: "200"
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Origin: "'*'"
+                passthroughBehavior: "never"
+                httpMethod: "POST"
+                requestTemplates:
+                  application/json: !Sub '{
+                    "AuthFlow": "ADMIN_NO_SRP_AUTH",
+                    "AuthParameters": { 
+                      "USERNAME": "$input.path("$.Username")",
+                      "PASSWORD": "$input.path("$.Password")"
+                      },
+                    "ClientId": "${UserPoolClientId}",
+                    "UserPoolId": "${UserPoolId}"
+                    }'
+                type: "aws"
+            options:
+              consumes:
+              - "application/json"
+              produces:
+              - "application/json"
+              responses:
+                '200':
+                  description: "200 response"
+                  schema:
+                    $ref: "#/definitions/Empty"
+                  headers:
+                    Access-Control-Allow-Origin:
+                      type: "string"
+                    Access-Control-Allow-Methods:
+                      type: "string"
+                    Access-Control-Allow-Headers:
+                      type: "string"
+              x-amazon-apigateway-integration:
+                responses:
+                  default:
+                    statusCode: "200"
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Methods: "'OPTIONS,POST'"
+                      method.response.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
+                      method.response.header.Access-Control-Allow-Origin: "'*'"
+                passthroughBehavior: "when_no_match"
+                requestTemplates:
+                  application/json: '{"statusCode": 200}'
+                type: "mock"
+          /signup:
+            post:
+              consumes:
+              - "application/json"
+              produces:
+              - "application/json"
+              responses:
+                "200":
+                  description: "200 response"
+                  schema:
+                    $ref: "#/definitions/Empty"
+              x-amazon-apigateway-integration:
+                credentials: !Sub arn:aws:iam::${AWS::AccountId}:role/${Service}-Cognito-Api-${Environment}
+                uri: arn:aws:apigateway:eu-west-1:cognito-idp:action/SignUp
+                responses:
+                  default:
+                    statusCode: "200"
+                requestTemplates:
+                  application/json: !Sub '{ 
+                      "ClientId": "${UserPoolClientId}", 
+                      "Password": "$input.path("$.Password")",
+                      "UserAttributes": [
+                        {
+                          "Name": "name",
+                          "Value": "$input.path("$.Name")"
+                        },
+                        {
+                          "Name": "email",
+                          "Value": "$input.path("$.Email")"
+                        },
+                        { 
+                          "Name": "custom:role",
+                          "Value": "user"
+                        }
+                      ],
+                    "Username": "$input.path("$.Email")"
+                  }'
+                passthroughBehavior: "when_no_templates"
+                httpMethod: "POST"
+                type: "aws"
+            put:
+              consumes:
+              - "application/json"
+              produces:
+              - "application/json"
+              responses:
+                "200":
+                  description: "200 response"
+                  schema:
+                    $ref: "#/definitions/Empty"
+              x-amazon-apigateway-integration:
+                credentials: !Sub arn:aws:iam::${AWS::AccountId}:role/${Service}-Cognito-Api-${Environment}
+                uri: arn:aws:apigateway:eu-west-1:cognito-idp:action/ConfirmSignUp
+                responses:
+                  default:
+                    statusCode: "200"
+                requestTemplates:
+                  application/json: !Sub '{ 
+                      "ClientId": "${UserPoolClientId}", 
+                      "ConfirmationCode": "$input.path("$.ConfirmationCode")", 
+                      "Username": "$input.path("$.Username")"
+                  }'
+                passthroughBehavior: "when_no_templates"
+                httpMethod: "POST"
+                type: "aws"
+        definitions:
+          Empty:
+            type: "object"
+            title: "Empty Schema"
+  ConnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: $connect
+      AuthorizationType: AWS_IAM
+      OperationName: ConnectRoute
+      RouteResponseSelectionExpression: $default
+      Target: !Join
+        - '/'
+        - - 'integrations'
+          - !Ref ConnectInteg
+  ConnectRouteResponse: 
+    Type: 'AWS::ApiGatewayV2::RouteResponse'
+    Properties:
+      RouteId: !Ref ConnectRoute
+      ApiId: !Ref ApiGateway
+      RouteResponseKey: $default
+  ConnectInteg:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ApiGateway
+      Description: Connect Integration
+      IntegrationType: AWS
+      CredentialsArn: !Sub arn:aws:iam::${AWS::AccountId}:role/${Service}-Api-Role-${Environment}
+      IntegrationUri: !Sub arn:aws:apigateway:${AWS::Region}:dynamodb:action/PutItem
+      IntegrationMethod: POST
+      TemplateSelectionExpression: '200'
+      RequestTemplates:
+        '200':
+          !Sub '{
+            "TableName": "${Service}-${Environment}",
+            "Item": { "connectionId": { "S": "$context.connectionId" }
+            }
+          }'
+  ConnectResponse:
+    Type: AWS::ApiGatewayV2::IntegrationResponse
+    Properties: 
+      ApiId: !Ref ApiGateway
+      IntegrationId: !Ref ConnectInteg
+      IntegrationResponseKey: $default
+  DisconnectRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: $disconnect
+      AuthorizationType: NONE
+      OperationName: DisconnectRoute
+      RouteResponseSelectionExpression: $default
+      Target: !Join
+        - '/'
+        - - 'integrations'
+          - !Ref DisconnectInteg
+  DisconnectRouteResponse: 
+    Type: 'AWS::ApiGatewayV2::RouteResponse'
+    Properties:
+      RouteId: !Ref DisconnectRoute
+      ApiId: !Ref ApiGateway
+      RouteResponseKey: $default
+  DisconnectInteg:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ApiGateway
+      Description: Disconnect Integration
+      IntegrationType: AWS
+      CredentialsArn: !Sub arn:aws:iam::${AWS::AccountId}:role/${Service}-Api-Role-${Environment}
+      IntegrationUri: !Sub arn:aws:apigateway:${AWS::Region}:dynamodb:action/DeleteItem
+      IntegrationMethod: POST
+      TemplateSelectionExpression: '200'
+      RequestTemplates:
+        '200':
+          !Sub '{
+            "TableName": "${Service}-${Environment}",
+            "Item": { "connectionId": { "S": "$context.connectionId" }
+            }
+          }'
+  DisconnectResponse:
+    Type: AWS::ApiGatewayV2::IntegrationResponse
+    Properties: 
+      ApiId: !Ref ApiGateway
+      IntegrationId: !Ref DisconnectInteg
+      IntegrationResponseKey: '$default'
+  DefaultRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: $default
+      AuthorizationType: NONE
+      OperationName: DefaultRoute
+      RouteResponseSelectionExpression: $default
+      Target: !Join
+        - '/'
+        - - 'integrations'
+          - !Ref DefaultInteg
+  DefaultRouteResponse: 
+    Type: 'AWS::ApiGatewayV2::RouteResponse'
+    Properties:
+      RouteId: !Ref DefaultRoute
+      ApiId: !Ref ApiGateway
+      RouteResponseKey: $default
+  DefaultInteg:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ApiGateway
+      Description: Default Integration
+      IntegrationType: MOCK
+      IntegrationMethod: POST
+      TemplateSelectionExpression: '200'
+  DefaultResponse:
+    Type: AWS::ApiGatewayV2::IntegrationResponse
+    Properties: 
+      ApiId: !Ref ApiGateway
+      IntegrationId: !Ref DefaultInteg
+      IntegrationResponseKey: $default
+      TemplateSelectionExpression: '200'
+      ResponseTemplates:
+        '200': 
+          '{"statusCode" : 200, "connectionId" : "$context.connectionId"}'
+  SendRoute:
+    Type: AWS::ApiGatewayV2::Route
+    Properties:
+      ApiId: !Ref ApiGateway
+      RouteKey: sendMessage
+      AuthorizationType: NONE
+      OperationName: SendRoute
+      Target: !Join
+        - '/'
+        - - 'integrations'
+          - !Ref SendInteg
+  SendInteg:
+    Type: AWS::ApiGatewayV2::Integration
+    Properties:
+      ApiId: !Ref ApiGateway
+      Description: Send Integration
+      IntegrationType: AWS_PROXY
+      IntegrationUri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${SendMessage.Arn}/invocations
+  SendMessage:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: index.handler
+      FunctionName: !Sub ${Service}-sendMessage-${Environment}
+      CodeUri: ./sendmessage
+      Timeout: 30
+      Policies:
+      - DynamoDBCrudPolicy:
+          TableName: !Sub ${Service}-${Environment}
+      - Statement:
+        - Effect: Allow
+          Action:
+            - execute-api:*
+          Resource:
+            - !Sub 'arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/*'
+  SendMessagePermission:
+    Type: AWS::Lambda::Permission
+    DependsOn:
+      - ApiGateway
+      - SendMessage
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref SendMessage
+      Principal: apigateway.amazonaws.com
+  Deployment:
+    Type: AWS::ApiGatewayV2::Deployment
+    DependsOn:
+    - ConnectRoute
+    - DefaultRoute
+    - SendMessage
+    - DisconnectRoute
+    Properties:
+      ApiId: !Ref ApiGateway
+  Stage:
+    Type: AWS::ApiGatewayV2::Stage
+    Properties:
+      StageName: !Sub ${Environment}
+      Description: !Sub ${Environment} Stage
+      DeploymentId: !Ref Deployment
+      ApiId: !Ref ApiGateway

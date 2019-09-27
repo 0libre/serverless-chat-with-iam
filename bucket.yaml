@@ -1,0 +1,30 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: ChatApp
+Transform: AWS::Serverless-2016-10-31
+Parameters:
+  Environment:
+    Type: String
+  Service:
+    Type: String
+Resources:
+  ChatAppDeployBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub ${Service}-deploy-${Environment}
+  ChatAppWwwBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      WebsiteConfiguration:
+        IndexDocument: index.html
+      BucketName: !Sub ${Service}-www-${Environment}
+  ChatAppWwwBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties: 
+      Bucket: !Sub ${Service}-www-${Environment}
+      PolicyDocument: 
+        Statement: 
+          - Action: 
+              - "s3:GetObject"
+            Effect: "Allow"
+            Principal: "*"
+            Resource: !Sub arn:aws:s3:::${Service}-www-${Environment}/*

@@ -1,0 +1,154 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: ChatApp
+Transform: AWS::Serverless-2016-10-31
+Parameters:
+  Environment:
+    Type: String
+  Service:
+    Type: String
+  UserPoolId:
+    Type: String
+  UserPoolClientId:
+    Type: String
+  IdentityPoolId:
+    Type: String
+  ApiGateway:
+    Type: String
+Resources:
+  CognitoUnAuthorizedRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Federated: cognito-identity.amazonaws.com
+            Action:
+              - sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                cognito-identity.amazonaws.com:aud: !Sub ${IdentityPoolId}
+              ForAnyValue:StringLike:
+                cognito-identity.amazonaws.com:amr: unauthenticated
+      Policies:
+        - PolicyName: CognitoUnauthorizedPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cognito-sync:*
+                Resource: "*"
+  CognitoUserAuthorizedRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: cognito-identity.amazonaws.com
+            Action:
+              - sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                cognito-identity.amazonaws.com:aud: !Sub ${IdentityPoolId}
+              ForAnyValue:StringLike:
+                cognito-identity.amazonaws.com:amr: authenticated
+      Policies:
+        - PolicyName: CognitoAuthorizedPolicy
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cognito-sync:*
+                  - cognito-identity:*
+                Resource: "*"
+              - Effect: "Allow"
+                Action:
+                  - execute-api:Invoke
+                Resource: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${ApiGateway}/${Environment}/$connect
+  CognitoPoolIdRoles:
+    DependsOn:
+      - CognitoUserAuthorizedRole
+    Type: AWS::Cognito::IdentityPoolRoleAttachment
+    Properties:
+      IdentityPoolId:  !Sub ${IdentityPoolId}
+      RoleMappings: !GetAtt TransformedRoleMapping.RoleMapping
+      Roles:
+        unauthenticated: !GetAtt CognitoUnAuthorizedRole.Arn
+  #CUSTOM RESOURCE SINCE AWS CURRENTLY DOESNT SUPPORT ITS OWN IDENTITY PROVIDER AND ROLE
+  CustomLambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+              - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: '/'
+      Policies:
+      - PolicyName: logs
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+            Resource: arn:aws:logs:*:*:*
+          - Effect: Allow
+            Action:
+              - lambda:InvokeFunction
+            Resource:
+              - !Join ['', ['arn:aws:lambda:*:', !Ref 'AWS::AccountId', ':function:*']]
+      RoleName: !Sub ${Service}-Lambda-Role-${Environment}
+  CognitoRoleMappingTransformer:
+    DependsOn:
+      - CustomLambdaExecutionRole
+    Type: AWS::Lambda::Function
+    Properties:
+      Code:
+        ZipFile: '
+          var response = require("cfn-response");
+          exports.handler = function(event, context) {
+            let resourceProperties = event.ResourceProperties;
+            let responseData = {
+              RoleMapping: {
+                [resourceProperties.IdentityProvider]: {
+                  Type: resourceProperties.Type,
+                },
+              },
+            };
+            if (resourceProperties.AmbiguousRoleResolution) {
+              responseData.RoleMapping[resourceProperties.IdentityProvider].AmbiguousRoleResolution = resourceProperties.AmbiguousRoleResolution;
+            }
+            if (resourceProperties.RulesConfiguration) {
+              responseData.RoleMapping[resourceProperties.IdentityProvider].RulesConfiguration = resourceProperties.RulesConfiguration;
+            }
+            response.send(event, context, response.SUCCESS, responseData);
+          };
+        '
+      Handler: index.handler
+      Role: !GetAtt CustomLambdaExecutionRole.Arn
+      FunctionName: !Sub ${Service}-CognitoRoleMappingTransformer-${Environment}
+      Runtime: nodejs8.10
+      Timeout: 30
+  TransformedRoleMapping:
+    Type: Custom::TransformedRoleMapping
+    Properties:
+      ServiceToken: !GetAtt CognitoRoleMappingTransformer.Arn
+      Type: Rules
+      AmbiguousRoleResolution: Deny
+      RulesConfiguration:
+        Rules:
+        - Claim: custom:role
+          MatchType: Contains
+          RoleARN: !GetAtt CognitoUserAuthorizedRole.Arn
+          Value: "user"
+      IdentityProvider: !Sub cognito-idp.${AWS::Region}.amazonaws.com/${UserPoolId}:${UserPoolClientId}
