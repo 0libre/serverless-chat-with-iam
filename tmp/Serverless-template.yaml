@@ -82,13 +82,9 @@ Resources:
             options:
               consumes:
               - application/json
-              produces:
-              - application/json
               responses:
                 '200':
                   description: 200 response
-                  schema:
-                    $ref: '#/definitions/Empty'
                   headers:
                     Access-Control-Allow-Origin:
                       type: string
@@ -101,12 +97,12 @@ Resources:
                   default:
                     statusCode: '200'
                     responseParameters:
-                      method.response.header.Access-Control-Allow-Methods: '''OPTIONS,POST'''
+                      method.response.header.Access-Control-Allow-Methods: '''POST,OPTIONS'''
                       method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'''
                       method.response.header.Access-Control-Allow-Origin: '''*'''
-                passthroughBehavior: when_no_match
                 requestTemplates:
                   application/json: '{"statusCode": 200}'
+                passthroughBehavior: when_no_match
                 type: mock
           /signup:
             post:
@@ -161,10 +157,53 @@ Resources:
                 passthroughBehavior: when_no_templates
                 httpMethod: POST
                 type: aws
+            options:
+              consumes:
+              - application/json
+              responses:
+                '200':
+                  description: 200 response
+                  headers:
+                    Access-Control-Allow-Origin:
+                      type: string
+                    Access-Control-Allow-Methods:
+                      type: string
+                    Access-Control-Allow-Headers:
+                      type: string
+              x-amazon-apigateway-integration:
+                responses:
+                  default:
+                    statusCode: '200'
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Methods: '''POST,PUT,OPTIONS'''
+                      method.response.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'''
+                      method.response.header.Access-Control-Allow-Origin: '''*'''
+                requestTemplates:
+                  application/json: '{"statusCode": 200}'
+                passthroughBehavior: when_no_match
+                type: mock
         definitions:
           Empty:
             type: object
             title: Empty Schema
+        x-amazon-apigateway-request-validators:
+          all:
+            validateRequestParameters: true
+            validateRequestBody: true
+        x-amazon-apigateway-gateway-responses:
+          DEFAULT_5XX:
+            responseParameters:
+              gatewayresponse.header.Access-Control-Allow-Methods: '''DELETE,POST,GET,OPTIONS'''
+              gatewayresponse.header.Access-Control-Allow-Origin: '''*'''
+              gatewayresponse.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'''
+          DEFAULT_4XX:
+            statusCode: 400
+            responseParameters:
+              gatewayresponse.header.Access-Control-Allow-Methods: '''DELETE,POST,GET,OPTIONS'''
+              gatewayresponse.header.Access-Control-Allow-Origin: '''*'''
+              gatewayresponse.header.Access-Control-Allow-Headers: '''Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'''
+            responseTemplates:
+              application/json: '{ "error": "There was an error in you request"}'
   ConnectRoute:
     Type: AWS::ApiGatewayV2::Route
     Properties:
@@ -329,7 +368,7 @@ Resources:
       Handler: index.handler
       FunctionName:
         Fn::Sub: ${Service}-sendMessage-${Environment}
-      CodeUri: s3://chatapp-deploy-dev/77ee83d77ac022e9ce1385008f2a6565
+      CodeUri: s3://newchatapp-deploy-dev/f005d7735a65fb7408c3d19b405013c8
       Timeout: 30
       Policies:
       - DynamoDBCrudPolicy:
@@ -356,8 +395,9 @@ Resources:
     DependsOn:
     - ConnectRoute
     - DefaultRoute
-    - SendMessage
+    - SendRoute
     - DisconnectRoute
+    - SendMessage
     Properties:
       ApiId:
         Ref: ApiGateway

@@ -51,4 +51,5 @@ Resources:
             Action:
               - cognito-idp:SignUp
               - cognito-idp:ConfirmSignUp
+              - cognito-idp:AdminInitiateAuth
             Resource: "*"

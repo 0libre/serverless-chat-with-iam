@@ -1,6 +1,7 @@
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import { BrowserRouter as Router, Route } from "react-router-dom";
 import PropTypes from 'prop-types';
-
+import qs from 'qs';
 import AWS from 'aws-sdk';
 import aws4 from 'aws4';
 import axios from 'axios';
@@ -32,7 +33,53 @@ const ACTION = 'sendMessage';
 const WEBSOCKET_URL = `${SOCKET_HOST}.execute-api.${AWS_REGION}.amazonaws.com`;
 const LOGIN_PROVIDER = `cognito-idp.${AWS_REGION}.amazonaws.com/${USER_POOL_ID}`;
 
-function App() {
+const App = () => (
+  <Router>
+    <Route exact path="/" component={TheChat} />
+    <Route path="/callback" component={idpLogin}/>
+  </Router>
+)
+
+const logiii = async () => {
+  return await new Promise((resolve, reject) => {
+    AWS.config.credentials.get(()=>{
+      // Access AWS resources here.
+      AWS.config.credentials.refresh(error => {
+        if (error) {
+          return reject(error);
+        }
+        return resolve(AWS.config.credentials.data.Credentials);
+      });
+    });
+  });
+}
+
+function idpLogin({ location }) {
+  const { code } = qs.parse(location.search, { ignoreQueryPrefix: true })
+  // Add the Google access token to the Cognito credentials login map.
+  console.log('code,',code)
+  AWS.config.region = AWS_REGION;
+  AWS.config.credentials = new AWS.CognitoIdentityCredentials({
+    IdentityPoolId: CLIENT_POOL_ID,
+    Logins: {
+      'cognito-idp.eu-west-1.amazonaws.com/eu-west-1_vDoGzF7hf': code
+    }
+  });
+
+  
+  // // Obtain AWS credentials
+  
+  const credentials = logiii()
+  console.log('credentials', credentials)
+  return (
+    <div>
+      <h3>{code}</h3>
+    </div>
+  );
+}
+
+
+function TheChat() {
   const [isLoggedIn, setLoggedIn] = useState(false);
   const [displayName, setDisplayName] = useState('');
   const [uuid, setUuid] = useState('');
@@ -155,11 +202,7 @@ const ChatComponent = props => {
   );
 };
 const loginToCognito = async (Username, Password) => {
-  const {
-    data: {
-      AuthenticationResult: { IdToken }
-    }
-  } = await axios.post(LOGIN_URL, { Username, Password });
+  const { data: { AuthenticationResult: { IdToken }}} = await axios.post(LOGIN_URL, { Username, Password });
   AWS.config.region = AWS_REGION;
   AWS.config.credentials = new AWS.CognitoIdentityCredentials({
     IdentityPoolId: CLIENT_POOL_ID,

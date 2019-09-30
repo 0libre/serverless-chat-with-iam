@@ -37,7 +37,8 @@ Resources:
   UserPoolClient:
     Type: AWS::Cognito::UserPoolClient
     Properties:
-      ExplicitAuthFlows: ADMIN_NO_SRP_AUTH
+      ExplicitAuthFlows: 
+        - ADMIN_NO_SRP_AUTH
       ClientName: !Sub ${Service}-client-${Environment}
       GenerateSecret: false
       UserPoolId: !Ref UserPool

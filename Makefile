@@ -1,5 +1,5 @@
 ENVIRONMENT ?= dev
-STACK_NAME  ?= chatapp
+STACK_NAME  ?= newchatapp
 AWS_REGION  ?= eu-west-1
 
 DEPLOY_BUCKET_STACK_NAME:=$(STACK_NAME)-buckets-$(ENVIRONMENT)
@@ -151,10 +151,12 @@ deploy_serverless:
 	Environment=$(ENVIRONMENT) \
 	Service=$(STACK_NAME)
 	@echo "\n----- Deploy serverless done -----\n"
+
+.PHONY: redeploy_websocket
+redeploy_websocket:
 	@echo "\n----- Redeploy API -----\n"
 	$(eval SOCKET_ID := $(shell aws --region $(AWS_REGION) apigatewayv2 get-apis --query 'Items[?Name==`$(STACK_NAME)-$(ENVIRONMENT)`].ApiId'  --output text))
 	aws --region $(AWS_REGION) apigatewayv2 create-deployment --api-id $(SOCKET_ID) --stage-name $(ENVIRONMENT)
-	$(eval API_ID := $(shell aws --region $(AWS_REGION) apigateway get-rest-apis --query 'items[?name==`$(STACK_NAME)-Cognito-$(ENVIRONMENT)`].id'  --output text))
 
 #########################################################
 ################### DEPLOY FRONTEND #####################
@@ -171,7 +173,14 @@ deploy_frontend:
 	REACT_APP_SOCKET_HOST=$(SOCKET_ID)\n\
 	REACT_APP_AWS_REGION=$(AWS_REGION)\n\
 	REACT_APP_USER_POOL_ID=$(USERPOOL_ID)\n\
-	REACT_APP_CLIENT_POOL_ID=$(IDENTITY_POOL_ID)"> frontend/.env.production
+	REACT_APP_CLIENT_POOL_ID=$(IDENTITY_POOL_ID)" > frontend/.env.production
+	printf "REACT_APP_ENV=$(ENVIRONMENT)\n\
+	REACT_APP_COGNITO_HOST=$(API_ID)\n\
+	REACT_APP_SOCKET_HOST=$(SOCKET_ID)\n\
+	REACT_APP_AWS_REGION=$(AWS_REGION)\n\
+	REACT_APP_USER_POOL_ID=$(USERPOOL_ID)\n\
+	REACT_APP_CLIENT_POOL_ID=$(IDENTITY_POOL_ID)" > frontend/.env.development
 	cd frontend && npm run build
 	aws s3 sync ./frontend/build s3://$(STACK_NAME)-www-$(ENVIRONMENT)/
 	@echo "\n----- AWS deploy frontend finished -----\n"
+	@echo "Go to: http://$(STACK_NAME)-www-$(ENVIRONMENT).s3-website-$(AWS_REGION).amazonaws.com/ to test the chat!"
