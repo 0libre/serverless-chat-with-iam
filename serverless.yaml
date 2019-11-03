@@ -105,16 +105,21 @@ Resources:
               produces:
               - "application/json"
               responses:
-                "200":
+                '200':
                   description: "200 response"
                   schema:
                     $ref: "#/definitions/Empty"
+                  headers:
+                    Access-Control-Allow-Origin:
+                      type: "string"
               x-amazon-apigateway-integration:
                 credentials: !Sub arn:aws:iam::${AWS::AccountId}:role/${Service}-Cognito-Api-${Environment}
                 uri: arn:aws:apigateway:eu-west-1:cognito-idp:action/SignUp
                 responses:
                   default:
                     statusCode: "200"
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Origin: "'*'"
                 requestTemplates:
                   application/json: !Sub '{ 
                       "ClientId": "${UserPoolClientId}", 
@@ -144,16 +149,21 @@ Resources:
               produces:
               - "application/json"
               responses:
-                "200":
+                '200':
                   description: "200 response"
                   schema:
                     $ref: "#/definitions/Empty"
+                  headers:
+                    Access-Control-Allow-Origin:
+                      type: "string"
               x-amazon-apigateway-integration:
                 credentials: !Sub arn:aws:iam::${AWS::AccountId}:role/${Service}-Cognito-Api-${Environment}
                 uri: arn:aws:apigateway:eu-west-1:cognito-idp:action/ConfirmSignUp
                 responses:
                   default:
                     statusCode: "200"
+                    responseParameters:
+                      method.response.header.Access-Control-Allow-Origin: "'*'"
                 requestTemplates:
                   application/json: !Sub '{ 
                       "ClientId": "${UserPoolClientId}", 
@@ -199,13 +209,13 @@ Resources:
         x-amazon-apigateway-gateway-responses:
           DEFAULT_5XX:
             responseParameters:
-              gatewayresponse.header.Access-Control-Allow-Methods: "'DELETE,POST,GET,OPTIONS'"
+              gatewayresponse.header.Access-Control-Allow-Methods: "'DELETE,POST,GET,PUT,OPTIONS'"
               gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
               gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
           DEFAULT_4XX:
             statusCode: 400
             responseParameters:
-              gatewayresponse.header.Access-Control-Allow-Methods: "'DELETE,POST,GET,OPTIONS'"
+              gatewayresponse.header.Access-Control-Allow-Methods: "'DELETE,POST,PUT,GET,OPTIONS'"
               gatewayresponse.header.Access-Control-Allow-Origin: "'*'"
               gatewayresponse.header.Access-Control-Allow-Headers: "'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token'"
             responseTemplates:

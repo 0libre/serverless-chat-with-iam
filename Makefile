@@ -1,5 +1,5 @@
 ENVIRONMENT ?= dev
-STACK_NAME  ?= newchatapp
+STACK_NAME  ?= oliverbredtest
 AWS_REGION  ?= eu-west-1
 
 DEPLOY_BUCKET_STACK_NAME:=$(STACK_NAME)-buckets-$(ENVIRONMENT)
