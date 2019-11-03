@@ -187,7 +187,7 @@ img {
   width: 100%;
 }
 .msg_history {
-  height: 516px;
+  height: 416px;
   overflow-y: auto;
 }
 .msg_sender {
